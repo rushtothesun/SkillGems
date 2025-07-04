@@ -1,7 +1,9 @@
 ﻿using ExileCore;
 using ExileCore.PoEMemory;
 using ExileCore.PoEMemory.Components;
+using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared.Helpers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -44,7 +46,7 @@ namespace SkillGems
 
         public override Job Tick()
         {
-            if (!Input.IsKeyDown(Settings.Run.Value) || !PanelVisible())
+            if ((!Input.IsKeyDown(Settings.Run.Value) && !Settings.UseMagicInput.Value) || !PanelVisible())
             {
                 _gemLevelingCts?.Cancel();
             }
@@ -56,7 +58,8 @@ namespace SkillGems
                 _gemLevelingTask.ContinueWith((task) =>
                 {
                     _gemLevelingTask = null;
-                    SetCursorPos(_mousePosition);
+                    if (!Settings.UseMagicInput.Value)
+                        SetCursorPos(_mousePosition);
                 });
             }
 
@@ -69,23 +72,37 @@ namespace SkillGems
 
             if (!gemsToLvlUpElements.Any()) return;
 
-            var elementToClick = gemsToLvlUpElements.ToList().FirstOrDefault()?.GetChildAtIndex(1);
+            GemLevelUpElement elementToClick = gemsToLvlUpElements.ToList().FirstOrDefault();
 
-            var ActionDelay = Settings.DelayBetweenEachMouseEvent.Value;
-            var GemDelay = Settings.DelayBetweenEachGemClick.Value;
-
-            if (Settings.AddPingIntoDelay.Value)
+            if (Settings.UseMagicInput.Value)
             {
-                ActionDelay += GameController.IngameState.ServerData.Latency;
-                GemDelay += GameController.IngameState.ServerData.Latency;
-            }
+                GameController.PluginBridge.GetMethod<Action<GemLevelUpElement>>("MagicInput.GemLevelUp")(elementToClick);
 
-            SetCursorPos(elementToClick);
-            await Task.Delay(ActionDelay);
-            Input.LeftDown();
-            await Task.Delay(ActionDelay);
-            Input.LeftUp();
-            await Task.Delay(GemDelay);
+                var GemDelay = Settings.DelayBetweenEachGemClick.Value;
+                if (Settings.AddPingIntoDelay.Value)
+                {
+                    GemDelay += GameController.IngameState.ServerData.Latency;
+                }
+                await Task.Delay(GemDelay);
+            }
+            else
+            {
+                var ActionDelay = Settings.DelayBetweenEachMouseEvent.Value;
+                var GemDelay = Settings.DelayBetweenEachGemClick.Value;
+
+                if (Settings.AddPingIntoDelay.Value)
+                {
+                    ActionDelay += GameController.IngameState.ServerData.Latency;
+                    GemDelay += GameController.IngameState.ServerData.Latency;
+                }
+
+                SetCursorPos(elementToClick?.GetChildAtIndex(1));
+                await Task.Delay(ActionDelay);
+                Input.LeftDown();
+                await Task.Delay(ActionDelay);
+                Input.LeftUp();
+                await Task.Delay(GemDelay);
+            }
 
             if (cancellationToken.IsCancellationRequested) return;
         }
@@ -121,9 +138,9 @@ namespace SkillGems
             return GetLevelableGems().Any();
         }
 
-        private List<Element> GetLevelableGems()
+        private List<GemLevelUpElement> GetLevelableGems()
         {
-            var gemsToLevelUp = new List<Element>();
+            var gemsToLevelUp = new List<GemLevelUpElement>();
 
             var possibleGemsToLvlUpElements = GameController.IngameState.IngameUi?.GemLvlUpPanel?.GemsToLvlUp;
 

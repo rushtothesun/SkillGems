@@ -10,6 +10,7 @@ namespace SkillGems
         public ToggleNode Enable { get; set; } = new ToggleNode(false);
         public ToggleNode ReturnMouseToStart { get; set; } = new ToggleNode(true);
         public ToggleNode AddPingIntoDelay { get; set; } = new ToggleNode(false);
+        public ToggleNode UseMagicInput { get; set; } = new ToggleNode(false);
         public HotkeyNode Run { get; set; } = new HotkeyNode(Keys.A);
         public RangeNode<int> DelayBetweenEachGemClick { get; set; } = new RangeNode<int>(20, 0, 1000);
         public RangeNode<int> DelayBetweenEachMouseEvent { get; set; } = new RangeNode<int>(20, 0, 1000);
