@@ -71,17 +71,15 @@ public class SkillGems : BaseSettingsPlugin<SkillGemsSettings>
 
     private async Task BeginGemLevel(CancellationToken cancellationToken)
     {
-        var gemsToLvlUpElements = GetLevelableGems();
+        var (buttonElement, gemElement) = GetElementToClick();
 
-        if (!gemsToLvlUpElements.Any()) return;
-
-        var elementToClick = gemsToLvlUpElements.ToList().FirstOrDefault();
+        if (buttonElement == null) return;
 
         if (Settings.UseMagicInput.Value)
         {
             var gemDelay = Settings.DelayBetweenEachGemClick.Value;
 
-            GameController.PluginBridge.GetMethod<Action<GemLevelUpElement>>("MagicInput.GemLevelUp")(elementToClick);
+            GameController.PluginBridge.GetMethod<Action<GemLevelUpElement>>("MagicInput.GemLevelUp")(gemElement);
 
             if (Settings.AddPingIntoDelay.Value)
                 gemDelay += GameController.IngameState.ServerData.Latency;
@@ -99,7 +97,7 @@ public class SkillGems : BaseSettingsPlugin<SkillGemsSettings>
                 gemDelay += GameController.IngameState.ServerData.Latency;
             }
 
-            SetCursorPos(elementToClick?.GetChildAtIndex(1));
+            SetCursorPos(buttonElement);
             await Task.Delay(actionDelay, cancellationToken);
             Input.LeftDown();
             await Task.Delay(actionDelay, cancellationToken);
@@ -138,25 +136,43 @@ public class SkillGems : BaseSettingsPlugin<SkillGemsSettings>
 
     private bool AnythingToLevel()
     {
-        return GetLevelableGems().Any();
+        return GetElementToClick().buttonElement != null;
     }
 
-    private List<GemLevelUpElement> GetLevelableGems()
+    private (Element buttonElement, GemLevelUpElement gemElement) GetElementToClick()
     {
-        var gemsToLevelUp = new List<GemLevelUpElement>();
+        var gemLvlUpPanel = GameController.IngameState.IngameUi?.GemLvlUpPanel;
+        if (gemLvlUpPanel == null || !gemLvlUpPanel.IsVisible) return (null, null);
 
-        var possibleGemsToLvlUpElements = GameController.IngameState.IngameUi?.GemLvlUpPanel?.GemsToLvlUp;
-
-        if (possibleGemsToLvlUpElements == null || !possibleGemsToLvlUpElements.Any())
-            return gemsToLevelUp;
-        foreach (var possibleGemsToLvlUpElement in possibleGemsToLvlUpElements)
+        // Path to Level All button: 4->(GemLvlUpPanel)1->0->0->0
+        var levelAllButton = gemLvlUpPanel.GetChildAtIndex(0)?.GetChildAtIndex(0)?.GetChildAtIndex(0);
+        if (levelAllButton != null && levelAllButton.IsVisible)
         {
-            gemsToLevelUp.AddRange(
-                from elem in possibleGemsToLvlUpElement.Children
-                where elem.Text != null && elem.Text.Contains("Click to level")
-                select possibleGemsToLvlUpElement);
+            LogMessage("SkillGems: Level All button is visible. Targeting it.", 5);
+            // For MagicInput, we need to return the parent GemLevelUpElement
+            var levelAllGemElement = gemLvlUpPanel.GetChildAtIndex(0)?.GetChildAtIndex(0) as GemLevelUpElement;
+            return (levelAllButton, levelAllGemElement);
         }
 
-        return gemsToLevelUp;
+        // Path to the first gem container: 4->(GemLvlUpPanel)1->0->1->0->0
+        var firstGemContainer = gemLvlUpPanel.GetChildAtIndex(0)?.GetChildAtIndex(1)?.GetChildAtIndex(0)?.GetChildAtIndex(0);
+        if (firstGemContainer == null)
+        {
+            return (null, null);
+        }
+
+        // Text is at child index 3, Button is at child index 1
+        var textElement = firstGemContainer.GetChildAtIndex(3);
+        var buttonElement = firstGemContainer.GetChildAtIndex(1);
+
+        if (textElement != null && buttonElement != null && textElement.Text != null && textElement.Text.Contains("Click to level"))
+        {
+            LogMessage($"SkillGems: Found levelable gem. Text: '{textElement.Text}'. Targeting button.", 5);
+            // For MagicInput, we need to return the parent GemLevelUpElement (the first gem container's parent)
+            var gemElement = gemLvlUpPanel.GetChildAtIndex(0)?.GetChildAtIndex(1)?.GetChildAtIndex(0) as GemLevelUpElement;
+            return (buttonElement, gemElement);
+        }
+        
+        return (null, null);
     }
 }
